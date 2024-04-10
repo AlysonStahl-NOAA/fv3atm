@@ -1,16 +1,20 @@
-!--------------- FV3 ATM solo model ----------------
-!
-!*** The FV3 atmosphere grid component nuopc cap
-!
-! Author:  Jun Wang@noaa.gov
-!
-! revision history
-! 11 Oct 2016: J. Wang          Initial code
-! 18 Apr 2017: J. Wang          set up fcst grid component and write grid components
-! 24 Jul 2017: J. Wang          initialization and time stepping changes for coupling
-! 02 Nov 2017: J. Wang          Use Gerhard's transferable RouteHandle
-!
+!> @file
+!> @brief The FV3 atmosphere grid component nuopc cap.
+!> @author Jun Wang @date 01/2017
 
+!> @brief The FV3 atmosphere grid component nuopc cap.
+!>
+!> FV3 ATM solo model
+!>
+!> ## Module History
+!> Date | Author | Modification
+!> -----|--------|-------------
+!> 11 Oct 2016 | J. Wang | Initial code
+!> 18 Apr 2017 | J. Wang | set up fcst grid component and write grid components
+!> 24 Jul 2017 | J. Wang | initialization and time stepping changes for coupling
+!> 02 Nov 2017 | J. Wang | Use Gerhard's transferable RouteHandle
+!>
+!> @author Jun Wang @date 01/2017
 module fv3atm_cap_mod
 
   use ESMF
@@ -46,9 +50,6 @@ module fv3atm_cap_mod
   use module_cplfields,       only: importFieldsValid, queryImportFields
 
   use module_cap_cpl,         only: diagnose_cplFields
-  use module_cplscalars,      only: flds_scalar_name, flds_scalar_num,          &
-                                    flds_scalar_index_nx, flds_scalar_index_ny, &
-                                    flds_scalar_index_ntile
 
   implicit none
   private
@@ -57,38 +58,80 @@ module fv3atm_cap_mod
 !-----------------------------------------------------------------------
 !
 
-  type(ESMF_GridComp)                         :: fcstComp
+  !> ???
+  type(ESMF_GridComp)                         :: fcstComp 
+
+  !> ???
   type(ESMF_State)                            :: fcstState
+
+  !> ???
   type(ESMF_FieldBundle), allocatable         :: fcstFB(:)
+
+  !> ???
   integer,dimension(:), allocatable           :: fcstPetList
+
+  !> ???
   integer, save                               :: FBCount
 
+
+  !> ???
   type(ESMF_GridComp),    allocatable         :: wrtComp(:)
+
+  !> ???
   type(ESMF_State),       allocatable         :: wrtState(:)
+
+  !> ???
   type(ESMF_FieldBundle), allocatable         :: wrtFB(:,:)
 
+  !> ???
   type(ESMF_RouteHandle), allocatable         :: routehandle(:,:)
+
+  !> ???
   type(ESMF_RouteHandle), allocatable         :: gridRedistRH(:,:)
-  type(ESMF_Grid), allocatable                :: srcGrid(:,:), dstGrid(:,:)
+
+  !> ???
+  type(ESMF_Grid), allocatable                :: srcGrid(:,:)
+
+  !> ???
+  type(ESMF_Grid), allocatable                :: dstGrid(:,:)
+
+  !> ???
   logical, allocatable                        :: is_moving_FB(:)
 
+  !> ???
   logical                                     :: profile_memory = .true.
+
+  !> ???
   logical                                     :: write_runtimelog = .false.
+
+  !> ???
   logical                                     :: lprint = .false.
 
+  !> ???
   integer                                     :: mype = -1
+
+  !> ???
   integer                                     :: dbug = 0
+
+  !> ???
   integer                                     :: frestart(999) = -1
 
+  !> ???
   real(kind=8)                                :: timere, timep2re
 !-----------------------------------------------------------------------
 
-  contains
+contains
 
 !-----------------------------------------------------------------------
 !------------------- Solo fv3atm code starts here ----------------------
 !-----------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine SetServices(gcomp, rc)
 
     type(ESMF_GridComp)  :: gcomp
@@ -169,6 +212,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine InitializeAdvertise(gcomp, rc)
 
     type(ESMF_GridComp)                    :: gcomp
@@ -219,7 +268,6 @@ module fv3atm_cap_mod
 
     integer                                :: sloc
     type(ESMF_StaggerLoc)                  :: staggerloc
-    character(len=20)                      :: cvalue
 !
 !------------------------------------------------------------------------
 !
@@ -264,7 +312,7 @@ module fv3atm_cap_mod
 
     cplprint_flag = (trim(value)=="true")
     write(msgString,'(A,l6)') trim(subname)//' cplprint_flag = ',cplprint_flag
-    call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO)
+    call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO, rc=rc)
 
     ! Read in cap debug flag
     call NUOPC_CompAttributeGet(gcomp, name='dbug_flag', value=value, isPresent=isPresent, isSet=isSet, rc=rc)
@@ -273,54 +321,7 @@ module fv3atm_cap_mod
      read(value,*) dbug
     end if
     write(msgString,'(A,i6)') trim(subname)//' dbug = ',dbug
-    call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO)
-
-    ! set cpl_scalars from config. Default to null values for standalone
-    flds_scalar_name = ''
-    flds_scalar_num = 0
-    flds_scalar_index_nx = 0
-    flds_scalar_index_ny = 0
-    flds_scalar_index_ntile = 0
-    call NUOPC_CompAttributeGet(gcomp, name="ScalarFieldName", value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    if (isPresent .and. isSet) then
-       flds_scalar_name = trim(cvalue)
-       call ESMF_LogWrite(trim(subname)//' flds_scalar_name = '//trim(flds_scalar_name), ESMF_LOGMSG_INFO)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    endif
-
-    call NUOPC_CompAttributeGet(gcomp, name="ScalarFieldCount", value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    if (isPresent .and. isSet) then
-       read(cvalue, *) flds_scalar_num
-       write(msgString,*) flds_scalar_num
-       call ESMF_LogWrite(trim(subname)//' flds_scalar_num = '//trim(msgString), ESMF_LOGMSG_INFO)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    endif
-    call NUOPC_CompAttributeGet(gcomp, name="ScalarFieldIdxGridNX", value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    if (isPresent .and. isSet) then
-       read(cvalue,*) flds_scalar_index_nx
-       write(msgString,*) flds_scalar_index_nx
-       call ESMF_LogWrite(trim(subname)//' : flds_scalar_index_nx = '//trim(msgString), ESMF_LOGMSG_INFO)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    endif
-    call NUOPC_CompAttributeGet(gcomp, name="ScalarFieldIdxGridNY", value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    if (isPresent .and. isSet) then
-       read(cvalue,*) flds_scalar_index_ny
-       write(msgString,*) flds_scalar_index_ny
-       call ESMF_LogWrite(trim(subname)//' : flds_scalar_index_ny = '//trim(msgString), ESMF_LOGMSG_INFO)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    endif
-    call NUOPC_CompAttributeGet(gcomp, name="ScalarFieldIdxGridNTile", value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    if (isPresent .and. isSet) then
-       read(cvalue,*) flds_scalar_index_ntile
-       write(msgString,*) flds_scalar_index_ntile
-       call ESMF_LogWrite(trim(subname)//' : flds_scalar_index_ntile = '//trim(msgString), ESMF_LOGMSG_INFO)
-       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    endif
+    call ESMF_LogWrite(trim(msgString), ESMF_LOGMSG_INFO, rc=rc)
 
 !------------------------------------------------------------------------
 ! get config variables
@@ -972,6 +973,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine InitializeRealize(gcomp, rc)
     type(ESMF_GridComp)  :: gcomp
     integer, intent(out) :: rc
@@ -1009,6 +1016,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine ModelAdvance(gcomp, rc)
 
     type(ESMF_GridComp)         :: gcomp
@@ -1038,6 +1051,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine ModelAdvance_phase1(gcomp, rc)
     type(ESMF_GridComp)         :: gcomp
     integer, intent(out)        :: rc
@@ -1092,6 +1111,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine ModelAdvance_phase2(gcomp, rc)
     type(ESMF_GridComp)         :: gcomp
     integer, intent(out)        :: rc
@@ -1229,6 +1254,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine ModelSetRunClock(gcomp, rc)
 
     type(ESMF_GridComp)         :: gcomp
@@ -1263,6 +1294,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine fv3_checkimport(gcomp, rc)
 
 !***  Check the import state fields
@@ -1352,6 +1389,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine TimestampExport_phase1(gcomp, rc)
 
     ! input arguments
@@ -1382,6 +1425,12 @@ module fv3atm_cap_mod
 
 !-----------------------------------------------------------------------------
 
+  !> ???
+  !>
+  !> @param gcomp ???
+  !> @param rc Return code.
+  !>
+  !> @author
   subroutine ModelFinalize(gcomp, rc)
 
     ! input arguments
@@ -1438,3 +1487,4 @@ module fv3atm_cap_mod
 !-----------------------------------------------------------------------------
 
 end module fv3atm_cap_mod
+
